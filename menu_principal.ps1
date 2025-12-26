@@ -6,12 +6,12 @@ if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
     exit
 }
 
-# Define a politica de execucao para a sessao atual para permitir scripts baixados
+# Define a politica de execucao para a sessao atual
 Set-ExecutionPolicy Bypass -Scope Process -Force
 
 # --- CONFIGURACAO DO REPOSITORIO ---
-$usuarioGithub = "SEU_USUARIO"
-$repoGithub    = "NOME_DO_REPOSITORIO"
+$usuarioGithub = "suportetech3brasil"
+$repoGithub    = "DownloadRemoto"
 $branch        = "main"
 $baseUrl       = "https://raw.githubusercontent.com/$usuarioGithub/$repoGithub/$branch"
 
@@ -27,22 +27,21 @@ try {
     Invoke-WebRequest -Uri "$baseUrl/dados_impressoras.csv" -OutFile $csvPath -ErrorAction Stop
     Invoke-WebRequest -Uri "$baseUrl/instalar_universal.ps1" -OutFile $motorPath -ErrorAction Stop
 } catch {
-    Write-Host "Erro ao conectar com GitHub. Verifique a internet ou o link." -ForegroundColor Red
+    Write-Host "Erro ao conectar com GitHub. Verifique a internet ou os nomes dos arquivos no repo." -ForegroundColor Red
     Pause; exit
 }
 
 $lista = Import-Csv -Path $csvPath -Delimiter ","
 
-# --- MENU DE EXECUCAO (LOOP) ---
+# --- MENU DE EXECUCAO ---
 do {
     Clear-Host
-    Write-Host "=== SUPORTE TECH3 - SELETOR AUTOMATICO ===" -ForegroundColor Magenta
+    Write-Host "=== SUPORTE TECH3 - SELETOR VIA GITHUB ===" -ForegroundColor Magenta
     foreach ($item in $lista) { Write-Host "$($item.ID)) $($item.Modelo)" }
     Write-Host "q) Sair"
-    
     $escolha = Read-Host "`nEscolha o ID do Modelo"
-    if ($escolha -eq "q") { break }
 
+    if ($escolha -eq "q") { break }
     $dados = $lista | Where-Object { $_.ID -eq $escolha }
 
     if ($dados) {
@@ -53,8 +52,8 @@ do {
             Write-Host "1) Instalacao Completa (Tudo)"
             Write-Host "2) Escolher Componente Especifico (Personalizado)"
             Write-Host "v) Voltar ao Menu de Modelos"
-            
             $modo = Read-Host "`nOpcao"
+
             if ($modo -eq "v") { $continuarNoModelo = $false; break }
 
             $params = @{

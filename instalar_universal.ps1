@@ -32,7 +32,7 @@ $totalEtapas = $acoes.Count; $etapaAtual = 1
 
 Write-Host "`n>>> PROCESSANDO ETAPA ($totalEtapas Etapa(s))" -ForegroundColor Cyan
 
-# --- ETAPA: IMPRESSAO ---
+# --- ETAPA: IMPRESSAO (VERSÃO HÍBRIDA FINAL) ---
 if ($instalarPrint) {
     Write-Host "`n[$etapaAtual/$totalEtapas] DRIVER DE IMPRESSAO" -ForegroundColor Yellow
     $novoNome = Read-Host "  -> Nome desejado para a impressora"
@@ -41,28 +41,49 @@ if ($instalarPrint) {
     $nomeArquivo = "driver_print_" + ($modelo -replace '\s+','_') + ".exe"
     $filePrint = Obter-Arquivo -url $urlPrint -nomeDestino $nomeArquivo
     
-    Write-Host "  -> Instalando driver e extraindo arquivos..." -ForegroundColor Gray
+    Write-Host "  -> Instalando driver... (Aguarde o instalador)" -ForegroundColor Gray
     Start-Process $filePrint -ArgumentList "/S" -Wait
-    Start-Sleep -Seconds 10
+    Start-Sleep -Seconds 10 # Tempo de registro no Windows
 
-    $impGenerica = Get-Printer | Where-Object {$_.DriverName -like "*Samsung Universal*" -or $_.Name -like "*Samsung Universal*"} | Select-Object -First 1
-    Write-Host "  -> Vinculando ao Driver Especifico ($filtroDriverWindows)..." -ForegroundColor Gray
-    
+    # Garantimos a porta IP primeiro
     if (-not (Get-PrinterPort $ip -ErrorAction SilentlyContinue)) { 
         Add-PrinterPort -Name $ip -PrinterHostAddress $ip 
     }
 
+    Write-Host "  -> Localizando impressora para configuracao..." -ForegroundColor Gray
+
+    # LOGICA DE BUSCA HÍBRIDA:
+    # 1. Tenta achar pelo nome do Driver (Caso M4070/M4020)
+    $impEspecífica = Get-Printer | Where-Object {$_.Name -like "*$filtroDriverWindows*" -or $_.DriverName -like "*$filtroDriverWindows*"} | Select-Object -First 1
+    
+    # 2. Se não achar, tenta achar pela Genérica/Universal (Caso M4080)
+    $impGenerica = $null
+    if (-not $impEspecífica) {
+        $impGenerica = Get-Printer | Where-Object {$_.DriverName -like "*Samsung Universal*" -or $_.Name -like "*Samsung Universal*"} | Select-Object -First 1
+    }
+
     try {
-        if ($impGenerica) {
+        if ($impEspecífica) {
+            # Se achou a fila específica (M4070/M4020), apenas aponta o IP e renomeia
+            Set-Printer -Name $impEspecífica.Name -PortName $ip
+            Rename-Printer -Name $impEspecífica.Name -NewName $novoNome
+            Write-Host "  -> OK: Impressora específica configurada!" -ForegroundColor Green
+        } 
+        elseif ($impGenerica) {
+            # Se achou a Universal (M4080), troca o driver para o específico e renomeia
             Set-Printer -Name $impGenerica.Name -DriverName $filtroDriverWindows -PortName $ip
             Rename-Printer -Name $impGenerica.Name -NewName $novoNome
-        } else {
+            Write-Host "  -> OK: Fila Universal convertida para específica!" -ForegroundColor Green
+        } 
+        else {
+            # Se o instalador não criou nada, cria do zero
             Add-Printer -Name $novoNome -DriverName $filtroDriverWindows -PortName $ip
+            Write-Host "  -> OK: Fila criada manualmente do zero!" -ForegroundColor Green
         }
-        Write-Host "  -> OK: Fila configurada com o driver especifico!" -ForegroundColor Green
     } catch {
-        Write-Host "  -> AVISO: Nao foi possivel forçar o driver '$filtroDriverWindows'." -ForegroundColor Yellow
+        Write-Host "  -> AVISO: Erro ao finalizar configuracao. Verifique o FiltroDriver no CSV." -ForegroundColor Yellow
     }
+    
     $etapaAtual++
 }
 
